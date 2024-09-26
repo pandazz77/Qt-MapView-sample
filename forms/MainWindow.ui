@@ -124,7 +124,7 @@
   <customwidget>
    <class>MapView</class>
    <extends>QWidget</extends>
-   <header location="global">core.h</header>
+   <header location="global">mapview.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

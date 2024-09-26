@@ -39,10 +39,10 @@ class Tile : public QObject{
         ~Tile();
 
         const int px, py;
-        QGraphicsPixmapItem *pixmap = nullptr;
+        QGraphicsItem *pixmap = nullptr;
 
     signals:
-        void created(QGraphicsPixmapItem *pixmap);
+        void created(QGraphicsItem *pixmap);
 };
 
 Point mercatorProject(LonLat pos);
@@ -92,7 +92,7 @@ class MapView: public QWidget{
         Camera cam;
 
     private slots:
-        void addItem(QGraphicsPixmapItem *item);
+        void addItem(QGraphicsItem *item);
 
     private:
         QGraphicsScene *scene = nullptr;

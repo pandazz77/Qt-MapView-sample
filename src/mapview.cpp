@@ -1,4 +1,4 @@
-#include "core.h"
+#include "mapview.h"
 
 #include <QLayout>
 
@@ -119,11 +119,14 @@ void MapView::renderTiles(){
 }
 
 void MapView::clearTiles(){
-    for(Tile *tile: tileStack) scene->removeItem(tile->pixmap);
+    for(Tile *tile: tileStack){
+        scene->removeItem(tile->pixmap);
+        tile->deleteLater();
+    }
     tileStack.clear();
 }
 
-void MapView::addItem(QGraphicsPixmapItem *item){
+void MapView::addItem(QGraphicsItem *item){
     scene->addItem(item);
     view->adjustSize();
 }

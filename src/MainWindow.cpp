@@ -2,7 +2,6 @@
 #include <QLabel>
 
 #include "MainWindow.h"
-#include "core.h"
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWindow){
     ui->setupUi(this);

@@ -3,7 +3,7 @@
 #include <QMainWindow>
 
 #include "ui_MainWindow.h"
-#include "core.h"
+#include "mapview.h"
 
 
 namespace Ui{
