@@ -12,10 +12,18 @@
 #define WEBMERCATOR_R 6378137.0
 #define DIAMETER (WEBMERCATOR_R * 2 * M_PI)
 
+#define MAPVIEW_DEBUG
+
 class Point{
     public:
         double x,y;
         Point(double x, double y): x(x), y(y) {};
+};
+
+class Point3D : public Point{
+    public:
+        double z;
+        Point3D(double x, double y, double z): Point(x,y), z(z) {};
 };
 
 class LonLat : public Point{
@@ -25,11 +33,13 @@ class LonLat : public Point{
         double &lat = Point::y;
 };
 
-class Camera : public LonLat{
+class LonLatZoom : public LonLat{
     public:
-        int zoom;
-        Camera(double lon = 0, double lat = 0, int zoom = 0) : LonLat(lon, lat), zoom(zoom) {}
+        LonLatZoom(double lon, double lat, double zoom): LonLat(lon, lat), zoom(zoom) {};
+        double zoom;
 };
+
+using Camera = LonLatZoom;
 
 class Tile : public QObject{
     Q_OBJECT
@@ -46,6 +56,8 @@ class Tile : public QObject{
 };
 
 Point mercatorProject(LonLat pos);
+Point3D lonlat2tile(LonLatZoom pos);
+LonLatZoom tile2lonlat(Point3D pos);
 
 struct TileInfo{
     int x, y, zoom, px, py;
@@ -76,6 +88,18 @@ class TileLayer: public QObject{
         QString baseUrl;
 };
 
+class MapGraphicsView: public QGraphicsView{
+    Q_OBJECT
+
+    public:
+        MapGraphicsView(QWidget *parent = nullptr);
+        ~MapGraphicsView();
+
+        void resizeEvent(QResizeEvent *event) override;
+
+        int sizeIncrement = 256;
+};
+
 class MapView: public QWidget{
     Q_OBJECT
 
@@ -89,14 +113,13 @@ class MapView: public QWidget{
         void renderTiles();
         void clearTiles();
 
-        Camera cam;
+        Camera cam = Camera(0,0,0);
 
     private slots:
         void addItem(QGraphicsItem *item);
 
     private:
-        QGraphicsScene *scene = nullptr;
-        QGraphicsView *view = nullptr;
+        MapGraphicsView *view = nullptr;
 
         QVector<TileLayer*> layers;
         TileMap tileStack;
