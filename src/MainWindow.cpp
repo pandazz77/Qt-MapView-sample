@@ -8,15 +8,15 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     mapView = ui->mapView;
 
-    connect(ui->camLat,&QDoubleSpinBox::valueChanged,[=](double value){ mapView->cam.lat = value; });
-    connect(ui->camLon,&QDoubleSpinBox::valueChanged,[=](double value){ mapView->cam.lon = value; });
-    connect(ui->camZoom,&QSpinBox::valueChanged,[=](int value){ mapView->cam.zoom = value; });
+    connect(ui->camLat,&QDoubleSpinBox::valueChanged,[=](double value){ mapView->view->cam.lat = value; });
+    connect(ui->camLon,&QDoubleSpinBox::valueChanged,[=](double value){ mapView->view->cam.lon = value; });
+    connect(ui->camZoom,&QSpinBox::valueChanged,[=](int value){ mapView->view->cam.zoom = value; });
     connect(ui->renderBtn,&QPushButton::clicked,this,&MainWindow::onRenderClicked);
 
     // init values
-    mapView->cam.lat = ui->camLat->value();
-    mapView->cam.lon = ui->camLon->value();
-    mapView->cam.zoom = ui->camZoom->value();
+    mapView->view->cam.lat = ui->camLat->value();
+    mapView->view->cam.lon = ui->camLon->value();
+    mapView->view->cam.zoom = ui->camZoom->value();
 };
 
 void MainWindow::onRenderClicked(){

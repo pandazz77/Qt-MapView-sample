@@ -59,6 +59,10 @@ Point mercatorProject(LonLat pos);
 Point3D lonlat2tile(LonLatZoom pos);
 LonLatZoom tile2lonlat(Point3D pos);
 
+Point tile2scenePoint(Point3D tile, Point3D centerTile, int tileSize = TILE_SIZE);
+Point3D scenePoint2tile(Point scenePoint, Point3D centerTile, int tileSize = TILE_SIZE);
+LonLatZoom scenePoint2lonlat(Point scenePoint, Point3D centerTile, int tileSize = TILE_SIZE);
+
 struct TileInfo{
     int x, y, zoom, px, py;
     TileInfo(int x, int y, int zoom, int px, int py) :
@@ -96,8 +100,14 @@ class MapGraphicsView: public QGraphicsView{
         ~MapGraphicsView();
 
         void resizeEvent(QResizeEvent *event) override;
+        void mouseMoveEvent(QMouseEvent *event) override;
+        void mousePressEvent(QMouseEvent *event) override;
 
         int sizeIncrement = 256;
+
+        QPointF previousP;
+        Camera cam = Camera(-3,40,7);
+        const Point3D centerTile;
 };
 
 class MapView: public QWidget{
@@ -113,13 +123,12 @@ class MapView: public QWidget{
         void renderTiles();
         void clearTiles();
 
-        Camera cam = Camera(0,0,0);
+        MapGraphicsView *view = nullptr;
 
     private slots:
         void addItem(QGraphicsItem *item);
 
     private:
-        MapGraphicsView *view = nullptr;
 
         QVector<TileLayer*> layers;
         TileMap tileStack;

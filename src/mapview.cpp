@@ -1,6 +1,7 @@
 #include "mapview.h"
 
 #include <QResizeEvent>
+#include <QMouseEvent>
 #include <QLayout>
 
 QNetworkAccessManager *mgr = new QNetworkAccessManager();
@@ -69,6 +70,30 @@ LonLatZoom tile2lonlat(Point3D pos){
 
 }
 
+Point tile2scenePoint(Point3D tile, Point3D centerTile, int tileSize){
+    // CENTER TILE COORDS ARE NOT FLOORED
+    // TILE COORDS ARE FLOORED
+    return Point(
+        floor(centerTile.x - tile.x) * -tileSize,
+        floor(centerTile.y - tile.y) * -tileSize
+    );
+}
+
+Point3D scenePoint2tile(Point scenePoint, Point3D centerTile, int tileSize){
+    // CENTER TILE COORDS ARE NOT FLOORED
+    // RESULT TILE COORDS ARE FLOORED
+    return Point3D(
+        centerTile.x + scenePoint.x / tileSize,
+        centerTile.y + scenePoint.y / tileSize,
+        centerTile.z
+    );
+}
+
+LonLatZoom scenePoint2lonlat(Point scenePoint, Point3D centerTile, int tileSize){
+    auto tile = scenePoint2tile(scenePoint,centerTile,tileSize);
+    return tile2lonlat(tile);
+}
+
 
 TileLayer::TileLayer(QString baseUrl, QObject *parent) : QObject(parent), baseUrl(baseUrl){
 
@@ -98,7 +123,7 @@ TileLayer::~TileLayer(){
 // ================================
 
 
-MapGraphicsView::MapGraphicsView(QWidget *parent) : QGraphicsView(new QGraphicsScene(),parent){
+MapGraphicsView::MapGraphicsView(QWidget *parent) : QGraphicsView(new QGraphicsScene(),parent), centerTile(lonlat2tile(cam)){
     // scale(1,-1); // flip y axis (will flip all tiles)
 
     #ifdef MAPVIEW_DEBUG // scene center
@@ -110,9 +135,32 @@ MapGraphicsView::MapGraphicsView(QWidget *parent) : QGraphicsView(new QGraphicsS
 
 void MapGraphicsView::resizeEvent(QResizeEvent *event){
     // qDebug() << event;
-    // scene()->setSceneRect(-width()/2, -height()/2,width(),height());
+    scene()->setSceneRect(-width()/2, -height()/2,width(),height());
     QGraphicsView::resizeEvent(event);
 }
+
+void MapGraphicsView::mousePressEvent(QMouseEvent *event){
+    previousP = event->scenePosition();
+}
+
+void MapGraphicsView::mouseMoveEvent(QMouseEvent *event){
+    auto scenePos = event->scenePosition();
+    QPointF delta = previousP - scenePos;
+    QRectF oldSceneRect = scene()->sceneRect();
+    QRectF newSceneRect(oldSceneRect.x()+delta.x(),oldSceneRect.y()+delta.y(),oldSceneRect.width(),oldSceneRect.height());
+    scene()->setSceneRect(newSceneRect);
+    // for(auto item: items()) item->setPos(item->pos()-delta); // XD
+    previousP = scenePos;
+
+    auto newCam = scenePoint2lonlat(Point(newSceneRect.x(),newSceneRect.y()),centerTile);
+    cam.lat = newCam.lat;
+    cam.lon = newCam.zoom;
+
+    //qDebug() << scene()->sceneRect();
+
+    QGraphicsView::mousePressEvent(event);
+}
+
 
 MapGraphicsView::~MapGraphicsView(){
 
@@ -133,21 +181,23 @@ QVector<TileInfo> MapView::getVisibleTiles(){
 
     qDebug() << "Client size:" << clientWidth << clientHeight;
 
-    const int startX = -clientWidth/2;
-    const int startY = -clientHeight/2;
+    const int startX = view->scene()->sceneRect().topLeft().x();
+    const int startY = view->scene()->sceneRect().topLeft().y();
+    const int endX   = view->scene()->sceneRect().bottomRight().x();
+    const int endY   = view->scene()->sceneRect().bottomRight().y();
 
+    auto tileCenter = view->centerTile;
 
-    Point centerm = mercatorProject(cam);
-    Point centerpx(
-        centerm.x * TILE_SIZE * pow(2,cam.zoom) / DIAMETER,
-        centerm.y * TILE_SIZE * pow(2,cam.zoom) / DIAMETER
-    );
+    qDebug() << "Tile center" << tileCenter.x << tileCenter.y << tileCenter.z;
+
+    const Point3D firstTile = scenePoint2tile(Point(startX,startY),tileCenter);
+    const Point3D lastTile = scenePoint2tile(Point(endX,endY),tileCenter);
 
     BBox bbox(
-        floor((centerpx.x - clientWidth / 2) / TILE_SIZE),
-        floor((centerpx.y - clientHeight / 2 ) / TILE_SIZE),
-        floor((centerpx.x + clientWidth / 2) / TILE_SIZE),
-        floor((centerpx.y + clientHeight / 2) / TILE_SIZE)
+        firstTile.x,
+        firstTile.y,
+        lastTile.x,
+        lastTile.y
     );
 
     QVector<TileInfo> tileInfos;
@@ -155,11 +205,11 @@ QVector<TileInfo> MapView::getVisibleTiles(){
     for(int x = bbox.xmin; x < bbox.xmax; ++x){
         for(int y = bbox.ymin; y < bbox.ymax; ++y){
             tileInfos.push_back(TileInfo(
-                x,y,cam.zoom,
-                (x - bbox.xmin) * TILE_SIZE,
-                (y - bbox.ymin) * TILE_SIZE
-                // startX + ((x - bbox.xmin) * TILE_SIZE),
-                // startY + ((y - bbox.ymin) * TILE_SIZE)
+                x,y,view->cam.zoom,
+                // (x - bbox.xmin) * TILE_SIZE,
+                // (y - bbox.ymin) * TILE_SIZE
+                startX + ((x - bbox.xmin) * TILE_SIZE),
+                startY + ((y - bbox.ymin) * TILE_SIZE)
                 // x * TILE_SIZE - centerpx.x + clientWidth / 2,
                 // y * TILE_SIZE - centerpx.y + clientHeight / 2
             ));
