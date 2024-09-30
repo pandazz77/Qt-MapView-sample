@@ -56,12 +56,12 @@ class Tile : public QObject{
 };
 
 Point mercatorProject(LonLat pos);
+LonLat mercatorUnproject(Point pos);
 Point3D lonlat2tile(LonLatZoom pos);
 LonLatZoom tile2lonlat(Point3D pos);
 
-Point tile2scenePoint(Point3D tile, Point3D centerTile, int tileSize = TILE_SIZE);
-Point3D scenePoint2tile(Point scenePoint, Point3D centerTile, int tileSize = TILE_SIZE);
-LonLatZoom scenePoint2lonlat(Point scenePoint, Point3D centerTile, int tileSize = TILE_SIZE);
+Point lonlat2scenePoint(LonLatZoom pos, int tileSize=TILE_SIZE);
+LonLatZoom scenePoint2lonLat(Point scenePoint, int zoom, int tileSize=TILE_SIZE);
 
 struct TileInfo{
     int x, y, zoom, px, py;
@@ -103,11 +103,13 @@ class MapGraphicsView: public QGraphicsView{
         void mouseMoveEvent(QMouseEvent *event) override;
         void mousePressEvent(QMouseEvent *event) override;
 
-        int sizeIncrement = 256;
-
-        QPointF previousP;
         Camera cam = Camera(-3,40,7);
-        const Point3D centerTile;
+
+    private:
+        QPointF previousP;
+
+    public slots:
+        void onZoomChanged();
 };
 
 class MapView: public QWidget{

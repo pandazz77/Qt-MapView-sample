@@ -42,11 +42,23 @@ inline double rad(double deg) { return deg * (M_PI/180); }
 inline double deg(double rad) { return rad * (180/M_PI); }
 inline double sec(double rad) { return 1/cos(rad); }
 
-Point mercatorProject(LonLat pos){
-    double x = DIAMETER * pos.lon / 360.0;
-    double sinlat = sin(pos.lat * M_PI / 180.0);
-    double y = DIAMETER * log((1 + sinlat) / (1 - sinlat)) / (4 * M_PI);
-    return Point(DIAMETER/2 + x, DIAMETER - (DIAMETER /2 +y));
+
+#define DEGREE_TO_METER(Y) (log(tan((90.0 + (Y)) * M_PI / 360.0)) / (M_PI / 180.0))*111319.490778
+#define DEGREE_TO_METER_REVERSE(Y) (atan(pow(M_E, ((Y)/111319.490778)*M_PI/180.0))*360.0/M_PI-90.0)
+
+Point mercatorProject(LonLat pos){ // 4326 to 3857
+    return Point(
+        DEGREE_TO_METER(pos.lon),
+        DEGREE_TO_METER(pos.lat)
+    );
+}
+
+LonLat mercatorUnproject(Point pos){ // 3857 to 4326
+    return LonLat(
+        DEGREE_TO_METER_REVERSE(pos.x),//lon,
+        DEGREE_TO_METER_REVERSE(pos.y)//atan(pow(M_E,rad(lat))*360) / M_PI - 90
+    );
+
 }
 
 Point3D lonlat2tile(LonLatZoom pos){
@@ -70,28 +82,21 @@ LonLatZoom tile2lonlat(Point3D pos){
 
 }
 
-Point tile2scenePoint(Point3D tile, Point3D centerTile, int tileSize){
-    // CENTER TILE COORDS ARE NOT FLOORED
-    // TILE COORDS ARE FLOORED
+Point lonlat2scenePoint(LonLatZoom pos, int tileSize){
+    const double n = pow(2,pos.zoom);
     return Point(
-        floor(centerTile.x - tile.x) * -tileSize,
-        floor(centerTile.y - tile.y) * -tileSize
+       (pos.lon+180) * (n*tileSize)/360,
+       (1-(log(tan(M_PI/4+(rad(pos.lat))/2)) /M_PI)) /2  * (n*tileSize)
     );
 }
 
-Point3D scenePoint2tile(Point scenePoint, Point3D centerTile, int tileSize){
-    // CENTER TILE COORDS ARE NOT FLOORED
-    // RESULT TILE COORDS ARE FLOORED
-    return Point3D(
-        centerTile.x + scenePoint.x / tileSize,
-        centerTile.y + scenePoint.y / tileSize,
-        centerTile.z
+LonLatZoom scenePoint2lonLat(Point scenePoint, int zoom, int tileSize){
+    const double n = pow(2,zoom);
+    return LonLatZoom(
+        (scenePoint.x*(360/(n*tileSize)))-180,
+        deg(atan(sinh((1-scenePoint.y*(2/(n*tileSize)))*M_PI))),
+        zoom
     );
-}
-
-LonLatZoom scenePoint2lonlat(Point scenePoint, Point3D centerTile, int tileSize){
-    auto tile = scenePoint2tile(scenePoint,centerTile,tileSize);
-    return tile2lonlat(tile);
 }
 
 
@@ -123,8 +128,11 @@ TileLayer::~TileLayer(){
 // ================================
 
 
-MapGraphicsView::MapGraphicsView(QWidget *parent) : QGraphicsView(new QGraphicsScene(),parent), centerTile(lonlat2tile(cam)){
+MapGraphicsView::MapGraphicsView(QWidget *parent) : QGraphicsView(new QGraphicsScene(),parent){
     // scale(1,-1); // flip y axis (will flip all tiles)
+
+    auto camscp = lonlat2scenePoint(cam);
+    scene()->setSceneRect(camscp.x,camscp.y,1,1);
 
     #ifdef MAPVIEW_DEBUG // scene center
         scene()->addRect(-5,-5,10,10,QPen(Qt::red))->setZValue(101); // center of scene
@@ -134,8 +142,6 @@ MapGraphicsView::MapGraphicsView(QWidget *parent) : QGraphicsView(new QGraphicsS
 }
 
 void MapGraphicsView::resizeEvent(QResizeEvent *event){
-    // qDebug() << event;
-    scene()->setSceneRect(-width()/2, -height()/2,width(),height());
     QGraphicsView::resizeEvent(event);
 }
 
@@ -149,16 +155,22 @@ void MapGraphicsView::mouseMoveEvent(QMouseEvent *event){
     QRectF oldSceneRect = scene()->sceneRect();
     QRectF newSceneRect(oldSceneRect.x()+delta.x(),oldSceneRect.y()+delta.y(),oldSceneRect.width(),oldSceneRect.height());
     scene()->setSceneRect(newSceneRect);
-    // for(auto item: items()) item->setPos(item->pos()-delta); // XD
+    qDebug() << "Current scene rect: " << scene()->sceneRect();
     previousP = scenePos;
 
-    auto newCam = scenePoint2lonlat(Point(newSceneRect.x(),newSceneRect.y()),centerTile);
+    auto newCam = scenePoint2lonLat(Point(newSceneRect.x(),newSceneRect.y()),cam.zoom);
     cam.lat = newCam.lat;
-    cam.lon = newCam.zoom;
+    cam.lon = newCam.lon;
 
-    //qDebug() << scene()->sceneRect();
+    qDebug() << "camera: " << cam.lat << cam.lon;
 
     QGraphicsView::mousePressEvent(event);
+}
+
+void MapGraphicsView::onZoomChanged(){
+    auto camscp = lonlat2scenePoint(cam);
+    scene()->setSceneRect(camscp.x,camscp.y,1,1);
+    // TODO: CLEAR TILELAYER!
 }
 
 
@@ -174,49 +186,36 @@ MapView::MapView(QWidget *parent) : QWidget(parent), view(new MapGraphicsView())
 };
 
 QVector<TileInfo> MapView::getVisibleTiles(){
-    const int incrementX = 0, incrementY = 0; 
-
-    const int clientWidth = view->width() + incrementX; 
-    const int clientHeight = view->height() + incrementY;
-
-    qDebug() << "Client size:" << clientWidth << clientHeight;
-
-    const int startX = view->scene()->sceneRect().topLeft().x();
-    const int startY = view->scene()->sceneRect().topLeft().y();
-    const int endX   = view->scene()->sceneRect().bottomRight().x();
-    const int endY   = view->scene()->sceneRect().bottomRight().y();
-
-    auto tileCenter = view->centerTile;
-
-    qDebug() << "Tile center" << tileCenter.x << tileCenter.y << tileCenter.z;
-
-    const Point3D firstTile = scenePoint2tile(Point(startX,startY),tileCenter);
-    const Point3D lastTile = scenePoint2tile(Point(endX,endY),tileCenter);
-
-    BBox bbox(
-        firstTile.x,
-        firstTile.y,
-        lastTile.x,
-        lastTile.y
-    );
-
-    QVector<TileInfo> tileInfos;
-
-    for(int x = bbox.xmin; x < bbox.xmax; ++x){
-        for(int y = bbox.ymin; y < bbox.ymax; ++y){
-            tileInfos.push_back(TileInfo(
-                x,y,view->cam.zoom,
-                // (x - bbox.xmin) * TILE_SIZE,
-                // (y - bbox.ymin) * TILE_SIZE
-                startX + ((x - bbox.xmin) * TILE_SIZE),
-                startY + ((y - bbox.ymin) * TILE_SIZE)
-                // x * TILE_SIZE - centerpx.x + clientWidth / 2,
-                // y * TILE_SIZE - centerpx.y + clientHeight / 2
-            ));
-        }
-    }
-
-    return tileInfos;
+	const int incrementX = TILE_SIZE*2, incrementY = TILE_SIZE*2; 
+	
+	const int clientWidth = view->width() + incrementX; 
+	const int clientHeight = view->height() + incrementY;
+	
+	const int startX = view->scene()->sceneRect().topLeft().x();
+	const int startY = view->scene()->sceneRect().topLeft().y();
+	
+	Point centerpx = lonlat2scenePoint(view->cam);
+	
+	BBox bbox(
+		floor((centerpx.x - clientWidth / 2) / TILE_SIZE),
+		floor((centerpx.y - clientHeight / 2 ) / TILE_SIZE),
+		floor((centerpx.x + clientWidth / 2) / TILE_SIZE),
+		floor((centerpx.y + clientHeight / 2) / TILE_SIZE)
+	);
+	
+	QVector<TileInfo> tileInfos;
+	
+	for(int x = bbox.xmin; x < bbox.xmax; ++x){
+		for(int y = bbox.ymin; y < bbox.ymax; ++y){
+            auto scp = lonlat2scenePoint(tile2lonlat({(double)x,(double)y,view->cam.zoom}));
+			tileInfos.push_back(TileInfo(
+				x,y,view->cam.zoom,
+                scp.x,scp.y
+			));
+		}
+	}
+	
+	return tileInfos;
 }
 
 void MapView::addTileLayer(TileLayer *layer){
