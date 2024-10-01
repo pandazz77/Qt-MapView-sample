@@ -143,6 +143,8 @@ MapGraphicsView::MapGraphicsView(QWidget *parent) : QGraphicsView(new QGraphicsS
 
 void MapGraphicsView::resizeEvent(QResizeEvent *event){
     QGraphicsView::resizeEvent(event);
+
+    renderTiles();
 }
 
 void MapGraphicsView::mousePressEvent(QMouseEvent *event){
@@ -164,37 +166,25 @@ void MapGraphicsView::mouseMoveEvent(QMouseEvent *event){
 
     qDebug() << "camera: " << cam.lat << cam.lon;
 
+    renderTiles();
+
     QGraphicsView::mousePressEvent(event);
 }
 
 void MapGraphicsView::onZoomChanged(){
     auto camscp = lonlat2scenePoint(cam);
     scene()->setSceneRect(camscp.x,camscp.y,1,1);
-    // TODO: CLEAR TILELAYER!
+    clearTiles();
+    renderTiles();
 }
 
-
-MapGraphicsView::~MapGraphicsView(){
-
-}
-
-
-MapView::MapView(QWidget *parent) : QWidget(parent), view(new MapGraphicsView()){
-    setLayout(new QGridLayout());
-    qDebug() << layout();
-    layout()->addWidget(view);
-};
-
-QVector<TileInfo> MapView::getVisibleTiles(){
+QVector<TileInfo> MapGraphicsView::getVisibleTiles(){
 	const int incrementX = TILE_SIZE*2, incrementY = TILE_SIZE*2; 
 	
-	const int clientWidth = view->width() + incrementX; 
-	const int clientHeight = view->height() + incrementY;
+	const int clientWidth = width() + incrementX; 
+	const int clientHeight = height() + incrementY;
 	
-	const int startX = view->scene()->sceneRect().topLeft().x();
-	const int startY = view->scene()->sceneRect().topLeft().y();
-	
-	Point centerpx = lonlat2scenePoint(view->cam);
+	Point centerpx = lonlat2scenePoint(cam);
 	
 	BBox bbox(
 		floor((centerpx.x - clientWidth / 2) / TILE_SIZE),
@@ -207,9 +197,9 @@ QVector<TileInfo> MapView::getVisibleTiles(){
 	
 	for(int x = bbox.xmin; x < bbox.xmax; ++x){
 		for(int y = bbox.ymin; y < bbox.ymax; ++y){
-            auto scp = lonlat2scenePoint(tile2lonlat({(double)x,(double)y,view->cam.zoom}));
+            auto scp = lonlat2scenePoint(tile2lonlat({(double)x,(double)y,cam.zoom}));
 			tileInfos.push_back(TileInfo(
-				x,y,view->cam.zoom,
+				x,y,cam.zoom,
                 scp.x,scp.y
 			));
 		}
@@ -218,33 +208,40 @@ QVector<TileInfo> MapView::getVisibleTiles(){
 	return tileInfos;
 }
 
-void MapView::addTileLayer(TileLayer *layer){
+void MapGraphicsView::addTileLayer(TileLayer *layer){
     layer->setParent(this);
     layers.push_back(layer);
 }
 
-void MapView::renderTiles(){
-    TileGrid grid = getVisibleTiles();
+void MapGraphicsView::renderTiles(){
+    TileGrid newGrid = getVisibleTiles();
+    for(int i=0;i<newGrid.size();i++){
+        if(tileStack.contains({newGrid[i].px,newGrid[i].py})){
+            newGrid.remove(i);
+            i--;
+        }
+    }
+
     for(TileLayer *layer: layers){
-        TileMap tiles = layer->renderTiles(grid);
-        tileStack.append(tiles);
+        TileMap tiles = layer->renderTiles(newGrid);
         for(Tile *tile: tiles){
-            tile->connect(tile,&Tile::created,this,&MapView::addItem);
+            tileStack[{tile->px,tile->py}] = tile;
+            tile->connect(tile,&Tile::created,this,&MapGraphicsView::addItem);
         }
     }
 }
 
-void MapView::clearTiles(){
+void MapGraphicsView::clearTiles(){
     for(Tile *tile: tileStack){
         tile->deleteLater(); // also delete from scene
     }
     tileStack.clear();
 }
 
-void MapView::addItem(QGraphicsItem *item){
-    view->scene()->addItem(item);
+void MapGraphicsView::addItem(QGraphicsItem *item){
+    scene()->addItem(item);
 }
 
-MapView::~MapView(){
+MapGraphicsView::~MapGraphicsView(){
 
 }

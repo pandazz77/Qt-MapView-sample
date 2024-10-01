@@ -99,6 +99,13 @@ class MapGraphicsView: public QGraphicsView{
         MapGraphicsView(QWidget *parent = nullptr);
         ~MapGraphicsView();
 
+
+
+        void addTileLayer(TileLayer *tileLayer);
+        QVector<TileInfo> getVisibleTiles();
+        void renderTiles();
+        void clearTiles();
+
         void resizeEvent(QResizeEvent *event) override;
         void mouseMoveEvent(QMouseEvent *event) override;
         void mousePressEvent(QMouseEvent *event) override;
@@ -107,31 +114,10 @@ class MapGraphicsView: public QGraphicsView{
 
     private:
         QPointF previousP;
+        QVector<TileLayer*> layers;
+        QHash<QPair<int,int>,Tile*> tileStack;
 
     public slots:
         void onZoomChanged();
-};
-
-class MapView: public QWidget{
-    Q_OBJECT
-
-    public:
-        MapView(QWidget *parent = nullptr);
-        ~MapView();
-
-        void addTileLayer(TileLayer *tileLayer);
-
-        QVector<TileInfo> getVisibleTiles();
-        void renderTiles();
-        void clearTiles();
-
-        MapGraphicsView *view = nullptr;
-
-    private slots:
         void addItem(QGraphicsItem *item);
-
-    private:
-
-        QVector<TileLayer*> layers;
-        TileMap tileStack;
 };

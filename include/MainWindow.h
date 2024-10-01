@@ -17,7 +17,7 @@ class MainWindow : public QMainWindow{
         MainWindow(QWidget *parent = nullptr);
         ~MainWindow();
 
-        MapView *mapView;
+        MapGraphicsView *mapView;
 
     public slots:
         void onRenderClicked();
