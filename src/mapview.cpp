@@ -6,32 +6,37 @@
 
 QNetworkAccessManager *mgr = new QNetworkAccessManager();
 
-Tile::Tile(QString url, int px, int py, QObject *parent) : QObject(parent), px(px), py(py){
+Tile::Tile(QString url, int px, int py, QObject *parent) : QObject(parent), px(px), py(py), url(url){
     QNetworkRequest req(url);
-    QNetworkReply *reply = mgr->get(req);
-    connect(reply,&QNetworkReply::finished,[reply,this,url](){
-        qDebug() << "Tile [url " << url << "]  [pos "<< this->px << "px" << "," << this->py << "py]";
-        bool netError = !reply->error();
-        assert(netError);
-
-        QPixmap temppix;
-        bool loadError = temppix.loadFromData(reply->readAll());
-        assert(loadError);
-
-        #ifdef MAPVIEW_DEBUG // tile border
-            QPainter p(&temppix);
-            p.setPen(Qt::black);
-            p.drawRect(0,0,temppix.width(),temppix.height());
-        #endif
-
-
-        this->pixmap = new QGraphicsPixmapItem(temppix);
-        this->pixmap->setPos(this->px,this->py);
-
-        emit this->created(this->pixmap);
-        reply->deleteLater();
-    });
+    reply = mgr->get(req);
+    reply->setParent(this);
+    connect(reply,&QNetworkReply::finished,this,&Tile::processResponse);
 };
+
+void Tile::processResponse(){
+    qDebug() << "Tile [url " << url << "]  [pos "<< this->px << "px" << "," << this->py << "py]";
+    bool netError = !reply->error();
+    assert(netError);
+    if(!netError) return;
+
+    QPixmap temppix;
+    bool loadError = temppix.loadFromData(reply->readAll());
+    assert(loadError);
+    if(!loadError) return;
+
+    #ifdef MAPVIEW_DEBUG // tile border
+        QPainter p(&temppix);
+        p.setPen(Qt::black);
+        p.drawRect(0,0,temppix.width(),temppix.height());
+    #endif
+
+
+    this->pixmap = new QGraphicsPixmapItem(temppix);
+    this->pixmap->setPos(this->px,this->py);
+
+    emit this->created(this->pixmap);
+    reply->deleteLater();
+}
 
 Tile::~Tile(){
     if(pixmap) delete pixmap;
@@ -146,10 +151,17 @@ MapGraphicsView::MapGraphicsView(QWidget *parent) : QGraphicsView(new QGraphicsS
     auto camscp = lonlat2scenePoint(cam);
     scene()->setSceneRect(camscp.x,camscp.y,1,1);
 
-    #ifdef MAPVIEW_DEBUG // scene center
+    #ifdef MAPVIEW_DEBUG 
+        // scene center
         scene()->addRect(-5,-5,10,10,QPen(Qt::red))->setZValue(101); // center of scene
         scene()->addLine(0,0,256,0,QPen(Qt::blue))->setZValue(100); // x axis
         scene()->addLine(0,0,0,256,QPen(Qt::green))->setZValue(100); // y axis
+
+        // cam
+        camHLine = scene()->addLine(camscp.x-256,camscp.y,camscp.x+256,camscp.y,QPen(Qt::red));
+        camVLine = scene()->addLine(camscp.x,camscp.y-256,camscp.x,camscp.y+256,QPen(Qt::red));
+        camHLine->setZValue(105);
+        camVLine->setZValue(105);
     #endif
 }
 
@@ -176,6 +188,12 @@ void MapGraphicsView::mouseMoveEvent(QMouseEvent *event){
     cam.lat = newCam.lat;
     cam.lon = newCam.lon;
 
+    #ifdef MAPVIEW_DEBUG
+        auto camscp = lonlat2scenePoint(cam);
+        camHLine->setLine(camscp.x-256,camscp.y,camscp.x+256,camscp.y);
+        camVLine->setLine(camscp.x,camscp.y-256,camscp.x,camscp.y+256);
+    #endif
+
     qDebug() << "camera: " << cam.lat << cam.lon;
 
     renderTiles();
@@ -186,7 +204,7 @@ void MapGraphicsView::mouseMoveEvent(QMouseEvent *event){
 void MapGraphicsView::onZoomChanged(){
     auto camscp = lonlat2scenePoint(cam);
     scene()->setSceneRect(camscp.x,camscp.y,1,1);
-    clearTiles(); // this thing crashes on fast zooming
+    clearTiles();
     renderTiles();
 }
 

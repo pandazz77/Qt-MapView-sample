@@ -12,7 +12,9 @@
 #define WEBMERCATOR_R 6378137.0
 #define DIAMETER (WEBMERCATOR_R * 2 * M_PI)
 
-#define MAPVIEW_DEBUG
+#ifndef NDEBUG
+    #define MAPVIEW_DEBUG
+#endif
 
 class Point{
     public:
@@ -50,6 +52,13 @@ class Tile : public QObject{
 
         const int px, py;
         QGraphicsItem *pixmap = nullptr;
+
+    private:
+        QNetworkReply *reply = nullptr;
+        QString url;
+
+    private slots:
+        void processResponse();
 
     signals:
         void created(QGraphicsItem *pixmap);
@@ -113,6 +122,11 @@ class MapGraphicsView: public QGraphicsView{
         void mousePressEvent(QMouseEvent *event) override;
 
         Camera cam = Camera(-3,40,7);
+
+        #ifdef MAPVIEW_DEBUG
+            QGraphicsLineItem *camHLine;
+            QGraphicsLineItem *camVLine;
+        #endif 
 
     private:
         QPointF previousP;
