@@ -85,9 +85,11 @@ class TileLayer: public QObject{
         TileLayer(QString baseUrl, QObject *parent=nullptr);
         ~TileLayer();
 
+        bool validateTileUrl(int x, int y, int z);
         QString getTileUrl(int x, int y, int z);
         TileMap renderTiles(TileGrid gridInfo);
 
+        int maxZoom = 20;
     private:
         QString baseUrl;
 };

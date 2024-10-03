@@ -11,10 +11,12 @@ Tile::Tile(QString url, int px, int py, QObject *parent) : QObject(parent), px(p
     QNetworkReply *reply = mgr->get(req);
     connect(reply,&QNetworkReply::finished,[reply,this,url](){
         qDebug() << "Tile [url " << url << "]  [pos "<< this->px << "px" << "," << this->py << "py]";
-        assert(!reply->error());
+        bool netError = !reply->error();
+        assert(netError);
 
         QPixmap temppix;
-        assert(temppix.loadFromData(reply->readAll()));
+        bool loadError = temppix.loadFromData(reply->readAll());
+        assert(loadError);
 
         #ifdef MAPVIEW_DEBUG // tile border
             QPainter p(&temppix);
@@ -104,6 +106,15 @@ TileLayer::TileLayer(QString baseUrl, QObject *parent) : QObject(parent), baseUr
 
 }
 
+
+bool TileLayer::validateTileUrl(int x, int y, int z){
+    if(x < 0 || y < 0 || z < 0) return false;
+    if(z > maxZoom) return false;
+    const int tilesPerEdge = pow(2,z);
+    if(x >= tilesPerEdge || y >= tilesPerEdge) return false;
+    return true;
+}
+
 QString TileLayer::getTileUrl(int x, int y, int z){
     QString result = baseUrl;
     result = result.replace("{x}",QString::number(x));
@@ -115,6 +126,7 @@ QString TileLayer::getTileUrl(int x, int y, int z){
 TileMap TileLayer::renderTiles(TileGrid gridInfo){
     TileMap result;
     for(auto tileInfo: gridInfo){
+        if(!validateTileUrl(tileInfo.x,tileInfo.y,tileInfo.zoom)) continue;
         Tile *tile = new Tile(getTileUrl(tileInfo.x,tileInfo.y,tileInfo.zoom),tileInfo.px,tileInfo.py);
         result.push_back(tile);
     }
@@ -174,7 +186,7 @@ void MapGraphicsView::mouseMoveEvent(QMouseEvent *event){
 void MapGraphicsView::onZoomChanged(){
     auto camscp = lonlat2scenePoint(cam);
     scene()->setSceneRect(camscp.x,camscp.y,1,1);
-    clearTiles();
+    clearTiles(); // this thing crashes on fast zooming
     renderTiles();
 }
 
