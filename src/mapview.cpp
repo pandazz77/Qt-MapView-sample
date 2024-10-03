@@ -227,6 +227,20 @@ void MapGraphicsView::addTileLayer(TileLayer *layer){
 
 void MapGraphicsView::renderTiles(){
     TileGrid newGrid = getVisibleTiles();
+
+    // clearing unused tiles from scene / TODO: better implementation
+    QVector<QPair<int,int>> newGridCoords;
+    for(auto info: newGrid){
+        newGridCoords.push_back({info.px,info.py});
+    }
+    for(auto key: tileStack.keys()){
+        if(!newGridCoords.contains(key)){
+            tileStack.take(key)->deleteLater();
+        }
+    }
+
+
+    // remove already existing tiles from grid to render
     for(int i=0;i<newGrid.size();i++){
         if(tileStack.contains({newGrid[i].px,newGrid[i].py})){
             newGrid.remove(i);
