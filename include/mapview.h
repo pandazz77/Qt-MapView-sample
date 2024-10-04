@@ -20,25 +20,44 @@ class Point{
     public:
         double x,y;
         Point(double x, double y): x(x), y(y) {};
+        Point &operator=(const Point & other){
+            x = other.x;
+            y = other.y;
+            return *this;
+        }
 };
 
 class Point3D : public Point{
     public:
         double z;
         Point3D(double x, double y, double z): Point(x,y), z(z) {};
+        Point3D &operator=(const Point3D & other){
+            Point::operator=(other);
+            z = other.z;
+            return *this;
+        }
 };
 
-class LonLat : public Point{
+class LonLat : private Point{
     public:
         LonLat(double lon, double lat) : Point(lon, lat) {};
         double &lon = Point::x;
         double &lat = Point::y;
+        LonLat &operator=(const LonLat & other){
+            Point::operator=(other);
+            return *this;
+        }
 };
 
 class LonLatZoom : public LonLat{
     public:
         LonLatZoom(double lon, double lat, double zoom): LonLat(lon, lat), zoom(zoom) {};
         double zoom;
+        LonLatZoom &operator=(const LonLatZoom & other){
+            LonLat::operator=(other);
+            zoom = other.zoom;
+            return *this;
+        }
 };
 
 using Camera = LonLatZoom;
@@ -110,7 +129,9 @@ class MapGraphicsView: public QGraphicsView{
         MapGraphicsView(QWidget *parent = nullptr);
         ~MapGraphicsView();
 
-
+        void setCamera(Camera cam);
+        void setCamera(double lon, double lat, double zoom);
+        Camera getCamera();
 
         void addTileLayer(TileLayer *tileLayer);
         QVector<TileInfo> getVisibleTiles();
@@ -122,14 +143,16 @@ class MapGraphicsView: public QGraphicsView{
         void mousePressEvent(QMouseEvent *event) override;
         void wheelEvent(QWheelEvent *event) override;
 
-        Camera cam = Camera(-3,40,7);
-
         #ifdef MAPVIEW_DEBUG
             QGraphicsLineItem *camHLine;
             QGraphicsLineItem *camVLine;
-        #endif 
+        #endif
+
+    signals:
+        void cameraChanged(double lon, double lat, double zoom);
 
     private:
+        Camera cam = Camera(-3,40,7);
         QPointF previousP;
         QVector<TileLayer*> layers;
         QHash<QPair<int,int>,Tile*> tileStack;

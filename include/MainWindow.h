@@ -19,8 +19,8 @@ class MainWindow : public QMainWindow{
 
         MapGraphicsView *mapView;
 
-    public slots:
-        void onRenderClicked();
+    private slots:
+        void setMapviewInfo(double lon, double lat, double zoom);
 
     private:
         Ui::MainWindow *ui;

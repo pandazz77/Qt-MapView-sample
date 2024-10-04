@@ -11,7 +11,7 @@ int main(int argc, char *argv[]){
     mw->show();
 
     mw->mapView->addTileLayer(new TileLayer("http://t2.openseamap.org/tile/{z}/{x}/{y}.png"));
-    mw->onRenderClicked(); // fire on startup
+    mw->mapView->renderTiles();
     
     return app.exec();
 }

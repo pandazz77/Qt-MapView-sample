@@ -165,6 +165,19 @@ MapGraphicsView::MapGraphicsView(QWidget *parent) : QGraphicsView(new QGraphicsS
     #endif
 }
 
+void MapGraphicsView::setCamera(Camera cam){
+    this->cam = cam;
+}
+
+void MapGraphicsView::setCamera(double lon, double lat, double zoom){
+    MapGraphicsView::setCamera(Camera(lon,lat,zoom));
+}
+
+Camera MapGraphicsView::getCamera(){
+    return cam;
+}
+
+
 void MapGraphicsView::resizeEvent(QResizeEvent *event){
     QGraphicsView::resizeEvent(event);
 
@@ -197,6 +210,7 @@ void MapGraphicsView::mouseMoveEvent(QMouseEvent *event){
     qDebug() << "camera: " << cam.lat << cam.lon;
 
     renderTiles();
+    emit cameraChanged(cam.lon,cam.lat,cam.zoom);
 
     QGraphicsView::mousePressEvent(event);
 }
@@ -216,6 +230,7 @@ void MapGraphicsView::onZoomChanged(){
     scene()->setSceneRect(camscp.x,camscp.y,1,1);
     clearTiles();
     renderTiles();
+    emit cameraChanged(cam.lon,cam.lat,cam.zoom);
 }
 
 QVector<TileInfo> MapGraphicsView::getVisibleTiles(){
