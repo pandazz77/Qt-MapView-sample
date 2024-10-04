@@ -201,8 +201,18 @@ void MapGraphicsView::mouseMoveEvent(QMouseEvent *event){
     QGraphicsView::mousePressEvent(event);
 }
 
+void MapGraphicsView::wheelEvent(QWheelEvent *event){
+    bool wheelUp = event->angleDelta().y() > 0;
+    wheelUp ? cam.zoom += 1 : cam.zoom -=1;
+    onZoomChanged();
+}
+
 void MapGraphicsView::onZoomChanged(){
     auto camscp = lonlat2scenePoint(cam);
+    #ifdef MAPVIEW_DEBUG
+        camHLine->setLine(camscp.x-256,camscp.y,camscp.x+256,camscp.y);
+        camVLine->setLine(camscp.x,camscp.y-256,camscp.x,camscp.y+256);
+    #endif
     scene()->setSceneRect(camscp.x,camscp.y,1,1);
     clearTiles();
     renderTiles();

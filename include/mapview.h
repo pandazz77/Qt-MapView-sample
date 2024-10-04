@@ -98,7 +98,7 @@ class TileLayer: public QObject{
         QString getTileUrl(int x, int y, int z);
         TileMap renderTiles(TileGrid gridInfo);
 
-        int maxZoom = 20;
+        int maxZoom = 18;
     private:
         QString baseUrl;
 };
@@ -120,6 +120,7 @@ class MapGraphicsView: public QGraphicsView{
         void resizeEvent(QResizeEvent *event) override;
         void mouseMoveEvent(QMouseEvent *event) override;
         void mousePressEvent(QMouseEvent *event) override;
+        void wheelEvent(QWheelEvent *event) override;
 
         Camera cam = Camera(-3,40,7);
 
