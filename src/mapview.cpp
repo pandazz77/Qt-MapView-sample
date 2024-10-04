@@ -209,7 +209,7 @@ void MapGraphicsView::onZoomChanged(){
 }
 
 QVector<TileInfo> MapGraphicsView::getVisibleTiles(){
-	const int incrementX = TILE_SIZE*2, incrementY = TILE_SIZE*2; 
+	const int incrementX = TILE_SIZE, incrementY = TILE_SIZE;
 	
 	const int clientWidth = width() + incrementX; 
 	const int clientHeight = height() + incrementY;
@@ -219,10 +219,10 @@ QVector<TileInfo> MapGraphicsView::getVisibleTiles(){
 	BBox bbox(
 		floor((centerpx.x - clientWidth / 2) / TILE_SIZE),
 		floor((centerpx.y - clientHeight / 2 ) / TILE_SIZE),
-		floor((centerpx.x + clientWidth / 2) / TILE_SIZE),
-		floor((centerpx.y + clientHeight / 2) / TILE_SIZE)
+		ceil((centerpx.x + clientWidth / 2) / TILE_SIZE),
+		ceil((centerpx.y + clientHeight / 2) / TILE_SIZE)
 	);
-	
+ 	
 	QVector<TileInfo> tileInfos;
 	
 	for(int x = bbox.xmin; x < bbox.xmax; ++x){
