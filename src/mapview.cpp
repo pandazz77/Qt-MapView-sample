@@ -6,7 +6,7 @@
 
 QNetworkAccessManager *mgr = new QNetworkAccessManager();
 
-Tile::Tile(QString url, int px, int py, QObject *parent) : QObject(parent), px(px), py(py), url(url){
+Tile::Tile(QString url, int px, int py, int zValue, QObject *parent) : QObject(parent), px(px), py(py), zValue(zValue), url(url){
     QNetworkRequest req(url);
     reply = mgr->get(req);
     reply->setParent(this);
@@ -33,6 +33,7 @@ void Tile::processResponse(){
 
     this->pixmap = new QGraphicsPixmapItem(temppix);
     this->pixmap->setPos(this->px,this->py);
+    this->pixmap->setZValue(this->zValue);
 
     emit this->created(this->pixmap);
     reply->deleteLater();
@@ -107,10 +108,13 @@ LonLatZoom scenePoint2lonLat(Point scenePoint, int zoom, int tileSize){
 }
 
 
-TileLayer::TileLayer(QString baseUrl, QObject *parent) : QObject(parent), baseUrl(baseUrl){
+TileLayer::TileLayer(QString baseUrl, MapGraphicsView *parent) : QObject(parent), baseUrl(baseUrl){
 
 }
 
+MapGraphicsView *TileLayer::parentView(){
+    return static_cast<MapGraphicsView*>(parent());
+}
 
 bool TileLayer::validateTileUrl(int x, int y, int z){
     if(x < 0 || y < 0 || z < 0) return false;
@@ -128,14 +132,76 @@ QString TileLayer::getTileUrl(int x, int y, int z){
     return result;
 }
 
-TileMap TileLayer::renderTiles(TileGrid gridInfo){
-    TileMap result;
-    for(auto tileInfo: gridInfo){
-        if(!validateTileUrl(tileInfo.x,tileInfo.y,tileInfo.zoom)) continue;
-        Tile *tile = new Tile(getTileUrl(tileInfo.x,tileInfo.y,tileInfo.zoom),tileInfo.px,tileInfo.py);
-        result.push_back(tile);
+QVector<TileInfo> TileLayer::getVisibleTiles(){
+    MapGraphicsView *view = parentView();
+
+    const int incrementX = TILE_SIZE, incrementY = TILE_SIZE;
+	
+	const int clientWidth = view->width() + incrementX; 
+	const int clientHeight = view->height() + incrementY;
+
+    auto cam = view->getCamera();
+	
+	Point centerpx = lonlat2scenePoint(cam);
+	
+	BBox bbox(
+		floor((centerpx.x - clientWidth / 2) / TILE_SIZE),
+		floor((centerpx.y - clientHeight / 2 ) / TILE_SIZE),
+		ceil((centerpx.x + clientWidth / 2) / TILE_SIZE),
+		ceil((centerpx.y + clientHeight / 2) / TILE_SIZE)
+	);
+ 	
+	QVector<TileInfo> tileInfos;
+	
+	for(int x = bbox.xmin; x < bbox.xmax; ++x){
+		for(int y = bbox.ymin; y < bbox.ymax; ++y){
+            auto scp = lonlat2scenePoint(tile2lonlat({(double)x,(double)y,cam.zoom}));
+			tileInfos.push_back(TileInfo(
+				x,y,cam.zoom,
+                scp.x,scp.y
+			));
+		}
+	}
+	
+	return tileInfos;
+}
+
+void TileLayer::renderTiles(){
+    TileGrid newGrid = getVisibleTiles();
+
+    // clearing unused tiles from scene / TODO: better implementation
+    QVector<QPair<int,int>> newGridCoords;
+    for(auto info: newGrid){
+        newGridCoords.push_back({info.px,info.py});
     }
-    return result;
+    for(auto key: tileStack.keys()){
+        if(!newGridCoords.contains(key)){
+            tileStack.take(key)->deleteLater();
+        }
+    }
+
+
+    // remove already existing tiles from grid to render
+    for(int i=0;i<newGrid.size();i++){
+        if(tileStack.contains({newGrid[i].px,newGrid[i].py})){
+            newGrid.remove(i);
+            i--;
+        }
+    }
+
+    for(auto tileInfo: newGrid){
+        if(!validateTileUrl(tileInfo.x,tileInfo.y,tileInfo.zoom)) continue;
+        Tile *tile = new Tile(getTileUrl(tileInfo.x,tileInfo.y,tileInfo.zoom),tileInfo.px,tileInfo.py,this->zValue);
+        tileStack[{tileInfo.px,tileInfo.py}] = tile;
+        connect(tile,&Tile::created,this,&TileLayer::itemCreated);
+    }
+}
+
+void TileLayer::clearTiles(){
+    for(Tile *tile: tileStack){
+        tile->deleteLater(); // also delete from scene
+    }
+    tileStack.clear();
 }
 
 TileLayer::~TileLayer(){
@@ -241,78 +307,23 @@ void MapGraphicsView::onZoomChanged(){
     emit cameraChanged(cam.lon,cam.lat,cam.zoom);
 }
 
-QVector<TileInfo> MapGraphicsView::getVisibleTiles(){
-	const int incrementX = TILE_SIZE, incrementY = TILE_SIZE;
-	
-	const int clientWidth = width() + incrementX; 
-	const int clientHeight = height() + incrementY;
-	
-	Point centerpx = lonlat2scenePoint(cam);
-	
-	BBox bbox(
-		floor((centerpx.x - clientWidth / 2) / TILE_SIZE),
-		floor((centerpx.y - clientHeight / 2 ) / TILE_SIZE),
-		ceil((centerpx.x + clientWidth / 2) / TILE_SIZE),
-		ceil((centerpx.y + clientHeight / 2) / TILE_SIZE)
-	);
- 	
-	QVector<TileInfo> tileInfos;
-	
-	for(int x = bbox.xmin; x < bbox.xmax; ++x){
-		for(int y = bbox.ymin; y < bbox.ymax; ++y){
-            auto scp = lonlat2scenePoint(tile2lonlat({(double)x,(double)y,cam.zoom}));
-			tileInfos.push_back(TileInfo(
-				x,y,cam.zoom,
-                scp.x,scp.y
-			));
-		}
-	}
-	
-	return tileInfos;
-}
-
 void MapGraphicsView::addTileLayer(TileLayer *layer){
     layer->setParent(this);
+    layer->zValue = layers.size();
+    connect(layer,&TileLayer::itemCreated,this,&MapGraphicsView::addItem);
     layers.push_back(layer);
 }
 
 void MapGraphicsView::renderTiles(){
-    TileGrid newGrid = getVisibleTiles();
-
-    // clearing unused tiles from scene / TODO: better implementation
-    QVector<QPair<int,int>> newGridCoords;
-    for(auto info: newGrid){
-        newGridCoords.push_back({info.px,info.py});
-    }
-    for(auto key: tileStack.keys()){
-        if(!newGridCoords.contains(key)){
-            tileStack.take(key)->deleteLater();
-        }
-    }
-
-
-    // remove already existing tiles from grid to render
-    for(int i=0;i<newGrid.size();i++){
-        if(tileStack.contains({newGrid[i].px,newGrid[i].py})){
-            newGrid.remove(i);
-            i--;
-        }
-    }
-
     for(TileLayer *layer: layers){
-        TileMap tiles = layer->renderTiles(newGrid);
-        for(Tile *tile: tiles){
-            tileStack[{tile->px,tile->py}] = tile;
-            tile->connect(tile,&Tile::created,this,&MapGraphicsView::addItem);
-        }
+        layer->renderTiles();
     }
 }
 
 void MapGraphicsView::clearTiles(){
-    for(Tile *tile: tileStack){
-        tile->deleteLater(); // also delete from scene
+    for(TileLayer *layer: layers){
+        layer->clearTiles();
     }
-    tileStack.clear();
 }
 
 void MapGraphicsView::addItem(QGraphicsItem *item){

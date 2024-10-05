@@ -66,10 +66,10 @@ class Tile : public QObject{
     Q_OBJECT
 
     public:
-        Tile(QString url, int px, int py, QObject *parent=nullptr);
+        Tile(QString url, int px, int py, int zValue, QObject *parent=nullptr);
         ~Tile();
 
-        const int px, py;
+        const int px, py, zValue;
         QGraphicsItem *pixmap = nullptr;
 
     private:
@@ -106,20 +106,31 @@ struct BBox{
 using TileGrid = QVector<TileInfo>;
 using TileMap = QVector<Tile*>;
 
+class MapGraphicsView;
+
 class TileLayer: public QObject{
     Q_OBJECT
 
     public:
-        TileLayer(QString baseUrl, QObject *parent=nullptr);
+        TileLayer(QString baseUrl, MapGraphicsView *parent=nullptr);
         ~TileLayer();
+
+        MapGraphicsView *parentView();
 
         bool validateTileUrl(int x, int y, int z);
         QString getTileUrl(int x, int y, int z);
-        TileMap renderTiles(TileGrid gridInfo);
+        QVector<TileInfo> getVisibleTiles();
+        void renderTiles();
+        void clearTiles();
 
         int maxZoom = 18;
+        int zValue = 0;
+    signals:
+        void itemCreated(QGraphicsItem *item);
+
     private:
         QString baseUrl;
+        QHash<QPair<int,int>,Tile*> tileStack;
 };
 
 class MapGraphicsView: public QGraphicsView{
@@ -134,7 +145,6 @@ class MapGraphicsView: public QGraphicsView{
         Camera getCamera();
 
         void addTileLayer(TileLayer *tileLayer);
-        QVector<TileInfo> getVisibleTiles();
         void renderTiles();
         void clearTiles();
 
@@ -155,7 +165,6 @@ class MapGraphicsView: public QGraphicsView{
         Camera cam = Camera(-3,40,7);
         QPointF previousP;
         QVector<TileLayer*> layers;
-        QHash<QPair<int,int>,Tile*> tileStack;
 
     private slots:
         void onLonLatChanged();
