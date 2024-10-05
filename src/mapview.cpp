@@ -166,7 +166,14 @@ MapGraphicsView::MapGraphicsView(QWidget *parent) : QGraphicsView(new QGraphicsS
 }
 
 void MapGraphicsView::setCamera(Camera cam){
+    auto previousCam = this->cam;
     this->cam = cam;
+    if(previousCam.zoom != cam.zoom){
+        onZoomChanged();
+    }
+    if(previousCam.lon != cam.lon && previousCam.lat != cam.lat){
+        onLonLatChanged();
+    }
 }
 
 void MapGraphicsView::setCamera(double lon, double lat, double zoom){
@@ -190,27 +197,13 @@ void MapGraphicsView::mousePressEvent(QMouseEvent *event){
 
 void MapGraphicsView::mouseMoveEvent(QMouseEvent *event){
     auto scenePos = event->scenePosition();
+
     QPointF delta = previousP - scenePos;
     QRectF oldSceneRect = scene()->sceneRect();
-    QRectF newSceneRect(oldSceneRect.x()+delta.x(),oldSceneRect.y()+delta.y(),oldSceneRect.width(),oldSceneRect.height());
-    scene()->setSceneRect(newSceneRect);
-    qDebug() << "Current scene rect: " << scene()->sceneRect();
+    cam = scenePoint2lonLat(Point(oldSceneRect.x()+delta.x(),oldSceneRect.y()+delta.y()),cam.zoom);
+    onLonLatChanged();
+
     previousP = scenePos;
-
-    auto newCam = scenePoint2lonLat(Point(newSceneRect.x(),newSceneRect.y()),cam.zoom);
-    cam.lat = newCam.lat;
-    cam.lon = newCam.lon;
-
-    #ifdef MAPVIEW_DEBUG
-        auto camscp = lonlat2scenePoint(cam);
-        camHLine->setLine(camscp.x-256,camscp.y,camscp.x+256,camscp.y);
-        camVLine->setLine(camscp.x,camscp.y-256,camscp.x,camscp.y+256);
-    #endif
-
-    qDebug() << "camera: " << cam.lat << cam.lon;
-
-    renderTiles();
-    emit cameraChanged(cam.lon,cam.lat,cam.zoom);
 
     QGraphicsView::mousePressEvent(event);
 }
@@ -219,6 +212,21 @@ void MapGraphicsView::wheelEvent(QWheelEvent *event){
     bool wheelUp = event->angleDelta().y() > 0;
     wheelUp ? cam.zoom += 1 : cam.zoom -=1;
     onZoomChanged();
+}
+
+void MapGraphicsView::onLonLatChanged(){
+    auto camscp = lonlat2scenePoint(cam);
+    auto previousRect = scene()->sceneRect();
+    scene()->setSceneRect(camscp.x,camscp.y,previousRect.width(),previousRect.height());
+    qDebug() << "camera: " << cam.lat << cam.lon;
+
+    #ifdef MAPVIEW_DEBUG
+        camHLine->setLine(camscp.x-256,camscp.y,camscp.x+256,camscp.y);
+        camVLine->setLine(camscp.x,camscp.y-256,camscp.x,camscp.y+256);
+    #endif
+
+    renderTiles();
+    emit cameraChanged(cam.lon,cam.lat,cam.zoom);
 }
 
 void MapGraphicsView::onZoomChanged(){

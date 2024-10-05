@@ -12,6 +12,8 @@ int main(int argc, char *argv[]){
 
     mw->mapView->addTileLayer(new TileLayer("http://t2.openseamap.org/tile/{z}/{x}/{y}.png"));
     mw->mapView->renderTiles();
+
+    mw->mapView->setCamera(30.3223,59.9292,12);
     
     return app.exec();
 }

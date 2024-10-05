@@ -157,7 +157,10 @@ class MapGraphicsView: public QGraphicsView{
         QVector<TileLayer*> layers;
         QHash<QPair<int,int>,Tile*> tileStack;
 
-    public slots:
+    private slots:
+        void onLonLatChanged();
         void onZoomChanged();
+
+    public slots:
         void addItem(QGraphicsItem *item);
 };
