@@ -6,7 +6,110 @@
 
 QNetworkAccessManager *mgr = new QNetworkAccessManager();
 
-Tile::Tile(QString url, int px, int py, int zValue, QObject *parent) : QObject(parent), px(px), py(py), zValue(zValue), url(url){
+ILayer::ILayer(int zValue, QObject *parent) : QObject(parent), zValue(zValue){
+
+}
+
+void ILayer::setZValue(int zValue){
+    this->zValue = zValue;
+}
+
+int ILayer::getZValue(){
+    return zValue;
+}
+
+
+ILayer::~ILayer(){
+
+}
+
+Layer::Layer(int px, int py, int zValue, QObject *parent) : px(px), py(py), ILayer(zValue,parent){
+
+}
+
+QGraphicsItem *Layer::getItem(){
+    return this->item;
+}
+
+void Layer::setPos(int px, int py, int zValue){
+    this->px = px;
+    this->py = py;
+    this->zValue = zValue;
+    if(item){
+        item->setPos(px,py);
+        item->setZValue(zValue);
+    }
+}
+
+Point3D Layer::getPos(){
+    return {(double)px, (double)py, (double)zValue};
+}
+
+Layer::~Layer(){
+    if(item) delete item;
+}
+
+LayerGroup::LayerGroup(int zValue, QObject *parent) : ILayer(zValue,parent){
+
+}
+
+void LayerGroup::setZValue(int zValue){
+    ILayer::setZValue(zValue);
+    for(ILayer *layer: layers){
+        if(dynamic_cast<LayerGroup*>(layer)){
+            LayerGroup *group = dynamic_cast<LayerGroup*>(layer);
+            group->setZValue(this->zValue);
+        } else { // standalone layer
+            Layer *standalone = dynamic_cast<Layer*>(layer);
+            auto pos = standalone->getPos();
+            standalone->setPos(pos.x,pos.y,this->zValue);
+        }
+    }
+}
+
+
+
+void LayerGroup::addLayer(ILayer *layer){
+    layers.insert(layer);
+    if(dynamic_cast<LayerGroup*>(layer)){
+        LayerGroup *group = dynamic_cast<LayerGroup*>(layer);
+        connect(group,&LayerGroup::itemCreated,this,&LayerGroup::itemCreated);
+    } else { // standalone layer
+        Layer *standalone = dynamic_cast<Layer*>(layer);
+        connect(standalone,&Layer::itemCreated,this,&LayerGroup::itemCreated);
+    }
+}
+
+void LayerGroup::removeLayer(ILayer *layer){
+    layers.remove(layer);
+    if(dynamic_cast<LayerGroup*>(layer)){
+        LayerGroup *group = dynamic_cast<LayerGroup*>(layer);
+        disconnect(group,&LayerGroup::itemCreated,this,&LayerGroup::itemCreated);
+    } else { // standalone layer
+        Layer *standalone = dynamic_cast<Layer*>(layer);
+        disconnect(standalone,&Layer::itemCreated,this,&LayerGroup::itemCreated);
+    }
+}
+
+QSet<QGraphicsItem*> LayerGroup::getItems(){
+    QSet<QGraphicsItem*> result;
+    for(ILayer *layer: layers){
+        if(dynamic_cast<LayerGroup*>(layer)){
+            LayerGroup *group = dynamic_cast<LayerGroup*>(layer);
+            result = result.unite(group->getItems());
+        } else { // standalone layer
+            Layer *standalone = dynamic_cast<Layer*>(layer);
+            result << standalone->getItem();
+        }
+    }
+    return result;
+}
+
+LayerGroup::~LayerGroup(){
+
+}
+
+Tile::Tile(QString url, int px, int py, int zValue, QObject *parent) : Layer(px,py,zValue,parent), url(url){
     QNetworkRequest req(url);
     reply = mgr->get(req);
     reply->setParent(this);
@@ -31,16 +134,16 @@ void Tile::processResponse(){
     #endif
 
 
-    this->pixmap = new QGraphicsPixmapItem(temppix);
-    this->pixmap->setPos(this->px,this->py);
-    this->pixmap->setZValue(this->zValue);
+    this->item = new QGraphicsPixmapItem(temppix);
+    this->item->setPos(this->px,this->py);
+    this->item->setZValue(this->zValue);
 
-    emit this->created(this->pixmap);
+    emit this->itemCreated(this->item);
     reply->deleteLater();
 }
 
 Tile::~Tile(){
-    if(pixmap) delete pixmap;
+    
 }
 
 
@@ -108,7 +211,7 @@ LonLatZoom scenePoint2lonLat(Point scenePoint, int zoom, int tileSize){
 }
 
 
-TileLayer::TileLayer(QString baseUrl, MapGraphicsView *parent) : QObject(parent), baseUrl(baseUrl){
+TileLayer::TileLayer(QString baseUrl, MapGraphicsView *parent) : LayerGroup(zValue,parent), baseUrl(baseUrl){
 
 }
 
@@ -166,6 +269,19 @@ QVector<TileInfo> TileLayer::getVisibleTiles(){
 	return tileInfos;
 }
 
+void TileLayer::onViewLonLatChanged(double lon, double lat){
+    renderTiles();
+}
+
+void TileLayer::onViewZoomChanged(double zoom){
+    clearTiles();
+    renderTiles();
+}
+
+void TileLayer::onViewSizeChanged(int width, int height){
+    renderTiles();
+}
+
 void TileLayer::renderTiles(){
     TileGrid newGrid = getVisibleTiles();
 
@@ -180,7 +296,6 @@ void TileLayer::renderTiles(){
         }
     }
 
-
     // remove already existing tiles from grid to render
     for(int i=0;i<newGrid.size();i++){
         if(tileStack.contains({newGrid[i].px,newGrid[i].py})){
@@ -193,7 +308,7 @@ void TileLayer::renderTiles(){
         if(!validateTileUrl(tileInfo.x,tileInfo.y,tileInfo.zoom)) continue;
         Tile *tile = new Tile(getTileUrl(tileInfo.x,tileInfo.y,tileInfo.zoom),tileInfo.px,tileInfo.py,this->zValue);
         tileStack[{tileInfo.px,tileInfo.py}] = tile;
-        connect(tile,&Tile::created,this,&TileLayer::itemCreated);
+        connect(tile,&Layer::itemCreated,this,&LayerGroup::itemCreated);
     }
 }
 
@@ -254,7 +369,7 @@ Camera MapGraphicsView::getCamera(){
 void MapGraphicsView::resizeEvent(QResizeEvent *event){
     QGraphicsView::resizeEvent(event);
 
-    renderTiles();
+    emit sizeChanged(width(),height());
 }
 
 void MapGraphicsView::mousePressEvent(QMouseEvent *event){
@@ -291,8 +406,7 @@ void MapGraphicsView::onLonLatChanged(){
         camVLine->setLine(camscp.x,camscp.y-256,camscp.x,camscp.y+256);
     #endif
 
-    renderTiles();
-    emit cameraChanged(cam.lon,cam.lat,cam.zoom);
+    emit lonLatChanged(cam.lon,cam.lat);
 }
 
 void MapGraphicsView::onZoomChanged(){
@@ -302,28 +416,20 @@ void MapGraphicsView::onZoomChanged(){
         camVLine->setLine(camscp.x,camscp.y-256,camscp.x,camscp.y+256);
     #endif
     scene()->setSceneRect(camscp.x,camscp.y,1,1);
-    clearTiles();
-    renderTiles();
-    emit cameraChanged(cam.lon,cam.lat,cam.zoom);
+    emit zoomChanged(cam.zoom);
 }
 
-void MapGraphicsView::addTileLayer(TileLayer *layer){
+void MapGraphicsView::addLayer(ILayer *layer){
     layer->setParent(this);
-    layer->zValue = layers.size();
-    connect(layer,&TileLayer::itemCreated,this,&MapGraphicsView::addItem);
+    layer->setZValue(layers.size());
+
+    connect(layer,&ILayer::itemCreated,this,&MapGraphicsView::addItem);
+
+    connect(this,&MapGraphicsView::lonLatChanged,layer,&ILayer::onViewLonLatChanged);
+    connect(this,&MapGraphicsView::zoomChanged,layer,&ILayer::onViewZoomChanged);
+    connect(this,&MapGraphicsView::sizeChanged,layer,&ILayer::onViewSizeChanged);
+
     layers.push_back(layer);
-}
-
-void MapGraphicsView::renderTiles(){
-    for(TileLayer *layer: layers){
-        layer->renderTiles();
-    }
-}
-
-void MapGraphicsView::clearTiles(){
-    for(TileLayer *layer: layers){
-        layer->clearTiles();
-    }
 }
 
 void MapGraphicsView::addItem(QGraphicsItem *item){

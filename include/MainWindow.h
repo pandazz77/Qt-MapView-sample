@@ -20,7 +20,8 @@ class MainWindow : public QMainWindow{
         MapGraphicsView *mapView;
 
     private slots:
-        void setMapviewInfo(double lon, double lat, double zoom);
+        void setLonLatInfo(double lon, double lat);
+        void setZoomInfo(double zoom);
 
     private:
         Ui::MainWindow *ui;

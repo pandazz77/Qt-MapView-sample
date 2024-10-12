@@ -62,15 +62,68 @@ class LonLatZoom : public LonLat{
 
 using Camera = LonLatZoom;
 
-class Tile : public QObject{
+class ILayer: public QObject{
+    Q_OBJECT
+
+    public:
+        ILayer(int zValue=0, QObject *parent=nullptr);
+        virtual ~ILayer();
+
+        virtual void setZValue(int zValue);
+        int getZValue();
+
+    public slots:
+        virtual void onViewLonLatChanged(double lon, double lat){ };
+        virtual void onViewZoomChanged(double zoom){ };
+        virtual void onViewSizeChanged(int width, int height){ };
+
+    signals:
+        void itemCreated(QGraphicsItem *item);
+
+    protected:
+        int zValue;
+};
+
+class Layer: public ILayer{
+    Q_OBJECT
+
+    public:
+        Layer(int px, int py, int zValue, QObject *parent=nullptr);
+        ~Layer();
+
+        QGraphicsItem *getItem();
+        void setPos(int px, int py, int zValue);
+        Point3D getPos();
+
+    protected:
+        QGraphicsItem *item = nullptr;
+        int px, py;
+};
+
+class LayerGroup: public ILayer{
+    Q_OBJECT
+
+    public:
+        LayerGroup(int zValue, QObject *parent=nullptr);
+        ~LayerGroup();
+
+        void addLayer(ILayer *layer);
+        void removeLayer(ILayer *layer);
+
+        QSet<QGraphicsItem*> getItems();
+        void setZValue(int zValue) override;
+
+    protected:
+        // should i use QGraphicsItemGroup ?
+        QSet<ILayer*> layers;
+};
+
+class Tile : public Layer{
     Q_OBJECT
 
     public:
         Tile(QString url, int px, int py, int zValue, QObject *parent=nullptr);
         ~Tile();
-
-        const int px, py, zValue;
-        QGraphicsItem *pixmap = nullptr;
 
     private:
         QNetworkReply *reply = nullptr;
@@ -78,9 +131,6 @@ class Tile : public QObject{
 
     private slots:
         void processResponse();
-
-    signals:
-        void created(QGraphicsItem *pixmap);
 };
 
 Point mercatorProject(LonLat pos);
@@ -108,7 +158,7 @@ using TileMap = QVector<Tile*>;
 
 class MapGraphicsView;
 
-class TileLayer: public QObject{
+class TileLayer: public LayerGroup{
     Q_OBJECT
 
     public:
@@ -120,14 +170,18 @@ class TileLayer: public QObject{
         bool validateTileUrl(int x, int y, int z);
         QString getTileUrl(int x, int y, int z);
         QVector<TileInfo> getVisibleTiles();
-        void renderTiles();
-        void clearTiles();
 
         int maxZoom = 18;
-        int zValue = 0;
-    signals:
-        void itemCreated(QGraphicsItem *item);
 
+    public slots:
+        void onViewLonLatChanged(double lon, double lat) override;
+        void onViewZoomChanged(double zoom) override;
+        void onViewSizeChanged(int width, int height) override;
+
+    private slots:
+        void renderTiles();
+        void clearTiles();
+       
     private:
         QString baseUrl;
         QHash<QPair<int,int>,Tile*> tileStack;
@@ -144,9 +198,9 @@ class MapGraphicsView: public QGraphicsView{
         void setCamera(double lon, double lat, double zoom);
         Camera getCamera();
 
-        void addTileLayer(TileLayer *tileLayer);
-        void renderTiles();
-        void clearTiles();
+        void addLayer(ILayer *layer);
+
+    protected:
 
         void resizeEvent(QResizeEvent *event) override;
         void mouseMoveEvent(QMouseEvent *event) override;
@@ -159,12 +213,14 @@ class MapGraphicsView: public QGraphicsView{
         #endif
 
     signals:
-        void cameraChanged(double lon, double lat, double zoom);
+        void lonLatChanged(double lon, double zoom);
+        void zoomChanged(double zoom);
+        void sizeChanged(int widht, int height);
 
     private:
         Camera cam = Camera(-3,40,7);
         QPointF previousP;
-        QVector<TileLayer*> layers;
+        QVector<ILayer*> layers;
 
     private slots:
         void onLonLatChanged();

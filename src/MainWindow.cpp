@@ -8,14 +8,20 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), ui(new Ui::MainWi
 
     mapView = ui->mapView;
 
-    connect(mapView,&MapGraphicsView::cameraChanged,this,&MainWindow::setMapviewInfo);
+    connect(mapView,&MapGraphicsView::lonLatChanged,this,&MainWindow::setLonLatInfo);
+    connect(mapView,&MapGraphicsView::zoomChanged,this,&MainWindow::setZoomInfo);
     auto cam = mapView->getCamera();
-    setMapviewInfo(cam.lon,cam.lat,cam.zoom);
+    
+    setLonLatInfo(cam.lon,cam.lat);
+    setZoomInfo(cam.zoom);
 };
 
-void MainWindow::setMapviewInfo(double lon, double lat, double zoom){
+void MainWindow::setLonLatInfo(double lon, double lat){
     ui->lonLabel->setText(QString::number(lon));
     ui->latLabel->setText(QString::number(lat));
+}
+
+void MainWindow::setZoomInfo(double zoom){
     ui->zoomLabel->setText(QString::number(zoom));
 }
 
