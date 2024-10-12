@@ -1,6 +1,7 @@
 #include <QApplication>
 
 #include "MainWindow.h"
+#include "TMSLayer.h"
 
 #define QT_FATAL_WARNINGS 
 
