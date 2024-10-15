@@ -18,6 +18,9 @@ LonLat mercatorUnproject(Point pos);
 Point3D lonlat2tile(LonLatZoom pos);
 LonLatZoom tile2lonlat(Point3D pos);
 
+Point _lonlat2scenePoint(LonLat pos, int mapWidth, int mapHeight);
+LonLat _scenePoint2lonLat(Point scenePoint, int mapWidth, int mapHeight);
+
 Point lonlat2scenePoint(LonLatZoom pos, int tileSize=256);
 LonLatZoom scenePoint2lonLat(Point scenePoint, int zoom, int tileSize=256);
 

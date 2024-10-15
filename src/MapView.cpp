@@ -44,20 +44,34 @@ LonLatZoom tile2lonlat(Point3D pos){
 
 }
 
+Point _lonlat2scenePoint(LonLat pos, int mapWidth, int mapHeight){
+    return Point(
+       (pos.lon+180) * mapWidth/360,
+       (1-(log(tan(M_PI/4+(rad(pos.lat))/2)) /M_PI)) /2  * mapHeight
+    );
+}
+
+LonLat _scenePoint2lonLat(Point scenePoint, int mapWidth, int mapHeight){
+    return LonLat(
+        (scenePoint.x*(360/(double)mapWidth))-180,
+        deg(atan(sinh((1-scenePoint.y*(2/(double)mapHeight))*M_PI)))
+    );
+}
+
 Point lonlat2scenePoint(LonLatZoom pos, int tileSize){
     const double n = pow(2,pos.zoom);
-    return Point(
-       (pos.lon+180) * (n*tileSize)/360,
-       (1-(log(tan(M_PI/4+(rad(pos.lat))/2)) /M_PI)) /2  * (n*tileSize)
-    );
+    const double size = n * tileSize;
+    return _lonlat2scenePoint(pos,size,size);
 }
 
 LonLatZoom scenePoint2lonLat(Point scenePoint, int zoom, int tileSize){
     const double n = pow(2,zoom);
+    const int size = n * tileSize;
+    auto pre = _scenePoint2lonLat(scenePoint,size,size);
     return LonLatZoom(
-        (scenePoint.x*(360/(n*tileSize)))-180,
-        deg(atan(sinh((1-scenePoint.y*(2/(n*tileSize)))*M_PI))),
-        zoom
+        pre.lon,
+        pre.lat,
+        (double)zoom
     );
 }
 
@@ -137,7 +151,7 @@ void MapGraphicsView::onLonLatChanged(){
     auto camscp = lonlat2scenePoint(cam);
     auto previousRect = scene()->sceneRect();
     scene()->setSceneRect(camscp.x,camscp.y,previousRect.width(),previousRect.height());
-    qDebug() << "camera: " << cam.lat << cam.lon;
+    qDebug() << "camera: " << cam.lat << cam.lon << "|" << camscp.x << camscp.y;
 
     #ifdef MAPVIEW_DEBUG
         camHLine->setLine(camscp.x-256,camscp.y,camscp.x+256,camscp.y);
@@ -162,6 +176,19 @@ void MapGraphicsView::addLayer(ILayer *layer){
     layer->setZValue(layers.size());
 
     connect(layer,&ILayer::itemCreated,this,&MapGraphicsView::addItem);
+
+    // TODO: better implementation
+    if(dynamic_cast<Layer*>(layer)){
+        Layer *standalone = dynamic_cast<Layer*>(layer);
+        if(standalone->getItem()) addItem(standalone->getItem());
+    } else {
+        LayerGroup *group = dynamic_cast<LayerGroup*>(layer);
+        if(!group->getItems().isEmpty()){
+            for(auto *item: group->getItems()){
+                addItem(item);
+            }
+        }
+    }
 
     connect(this,&MapGraphicsView::lonLatChanged,layer,&ILayer::onViewLonLatChanged);
     connect(this,&MapGraphicsView::zoomChanged,layer,&ILayer::onViewZoomChanged);
